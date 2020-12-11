@@ -1,0 +1,916 @@
+---
+title: "Tercijarizacija: geografski aspekti"
+author: "Simunic, N. and Sikic, L. , PhD"
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+header-includes:
+  - \usepackage{caption}
+  - \captionsetup[figure]{labelformat=empty}
+output:
+  bookdown::word_document2: null 
+  bookdown::tufte_html2:
+    number_sections: no
+    toc: yes
+  bookdown::pdf_document2:
+    includes:
+      before_body:
+      in_header: preamble.tex
+    keep_tex: yes
+    latex_engine: xelatex
+    number_sections: true
+    toc: no
+bibliography: 
+fontsize: 12pt
+link-citations: yes
+---
+
+
+```{r paketi, warning = FALSE, include = FALSE}
+#"C:/Users/msagovac/Dropbox/digipod/reference.bib"
+
+rm(list = ls()) 
+
+
+#knitr::opts_chunk$set(echo = TRUE)
+
+
+if (Sys.getenv("JAVA_HOME")!="")  Sys.setenv(JAVA_HOME="")
+
+library(rJava)
+library(eurostat)
+library(tufte)
+library(tidyverse)
+library(scales)
+library(grid)
+library(flextable)
+library(ggthemes)
+library(extrafont)
+library(gridExtra)
+library(RMySQL)
+library(RODBC)
+library(stringi)
+library(plm)
+library(data.table)
+library(ggpubr)
+library(prodest)
+library(knitr)
+library(huxtable)
+library(stringr)
+library(rvest)
+
+
+
+
+```
+
+```{r varijable, message = FALSE , include = FALSE}
+
+
+db <- dbConnect(MySQL(),
+                dbname = "odvjet12_gfi", 
+                host =  "91.234.46.219", 
+                port = 3306L, user = "odvjet12_mislav", 
+                password = "Theanswer0207")
+
+q <- sprintf("SELECT b372 AS Zaposleni,
+                     b084/1000000000 AS d_dug,
+                     b094/1000000000 AS k_dug,
+                     b010/1000000000 AS matimov, 
+                     b063/1000000000 AS kapital_rezerve,
+                     b064/1000000000 AS osnovni_kapital,
+                     b003/1000000000 AS nematimov,
+                     b110/1000000000 AS prihod,
+                     b120/1000000000 AS placa_net,
+                     b119/1000000000 AS placa_brutto,
+                     b123/1000000000 AS amortizacija,
+                     b136/1000000000 AS financijski_trosak,
+                     b159/1000000000 AS porez_dobit,
+                     b151/1000000000 AS nett,
+                     b115/1000000000 AS materijalni_trosak,
+                     b084/1000000000 AS d_obveze,
+                     b094/1000000000 AS k_obveze,
+                     b335/1000000000 AS Export,
+                     b370/1000000000 AS Import,
+                     b337/1000000000 AS energy,
+                     reportyear, subjectid, employeecounteop, foreigncontrol,
+             nacerev21, subjecttaxnoid, nacerev22,nacerev11, nacerev23, nacerev24, municipalityid
+, countyid, regionid
+
+             FROM gfi_all 
+             WHERE reportyear >= 2000;")  
+
+
+data <- dbGetQuery(db, q)
+dbDisconnect(db)
+
+
+```
+
+
+
+
+```{r}
+
+
+str(data)
+range(data$reportyear)
+
+
+data %>%
+  filter(reportyear %in% c(2012,2017))
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# UVOD
+
+
+
+# EMPIRIJSKA ANALIZA
+
+
+
+## Identification
+
+
+
+
+```{r identifikacija , message = FALSE, eval = TRUE, echo=FALSE , include = FALSE }
+
+data %>%
+#  filter( nacerev23 %in% c(261:264, 465, 581:639, 951)) %>%
+  group_by(reportyear,nacerev21,nacerev11,nacerev22,nacerev23,nacerev24, countyid,municipalityid) %>%
+  summarise(n = n_distinct(subjectid),
+            prihod = sum(prihod, na.rm = TRUE),
+            izvoz = sum(Export, na.rm = TRUE),
+            uvoz = sum(Import, na.rm = TRUE),
+            k_dug = sum(k_dug, na.rm = TRUE),
+            d_dug = sum(d_dug, na.rm = TRUE),
+             rad = sum(employeecounteop, na.rm = TRUE),
+             mim = sum(matimov, na.rm = TRUE),
+             nim = sum(nematimov, na.rm = TRUE),
+             placa = sum(placa_brutto, na.rm = TRUE),
+             amortizacija = sum(amortizacija , na.rm = TRUE),
+             fin_rashod = sum(financijski_trosak , na.rm = TRUE),
+             tax_nett = sum(porez_dobit , na.rm = TRUE),
+             nett = sum(nett , na.rm = TRUE),
+             kapital = sum(kapital_rezerve , na.rm = TRUE),
+             plata =  (sum(placa_brutto, na.rm = TRUE)/(sum(employeecounteop, na.rm = TRUE)))*1000000000/12) %>%
+    mutate(dv = placa + amortizacija + fin_rashod + tax_nett + nett,
+           imov = mim + nim,
+           dug = k_dug + d_dug,
+           invest = (imov + amortizacija) - dplyr::lag(imov)) -> agg_svi
+
+agg_svi 
+  filter( reportyear == 2017) %>% View()
+  
+agg_svi %>%
+  ungroup() %>%
+  group_by(reportyear, countyid, nacerev21) %>%
+  summarise(dv = sum(dv, na.rm = TRUE),
+            zap = sum(rad, na.rm = TRUE),
+            n = sum(n, na.rm = TRUE)) %>% 
+  filter(reportyear %in% 2015:2017) %>%
+  filter(nacerev21 == "J") %>% View()
+ 
+gfi_2017 <- agg_svi %>%
+  filter(reportyear == 2017)
+
+write.csv2(gfi_2017, "gfi_2017.csv")
+
+gfi_2012 <- agg_svi %>%
+  filter(reportyear == 2012)
+
+write.csv2(gfi_2012, "gfi_2012.csv")
+
+gfi_2008 <- agg_svi %>%
+  filter(reportyear == 2008)
+
+write.csv2(gfi_2008, "gfi_2008.csv")
+
+gfi_2002 <- agg_svi %>%
+  filter(reportyear == 2002)
+
+write.csv2(gfi_2002, "gfi_2002.csv")
+
+```  
+##
+
+```{r drugi_export}
+
+data %>%
+  filter( reportyear == 2016) %>%
+  group_by(nacerev21, countyid ) %>%
+  filter(nacerev21 == "A") %>% View()
+
+geo <- read.csv2("OPCINE.csv") %>%
+  select(ZUPANIJA, NAZIV_ZUP) %>%
+  distinct(.)
+
+data %>%
+#  filter( reportyear == 2016) %>%
+  mutate(djelatnosti = case_when(nacerev21 == "A" ~ "primarne",
+                                 nacerev21 %in% c("B", "C", "D", "E", "F") ~ "sekundarne",
+                                 nacerev21 %in% c("G", "H", "I", "J") ~ "tecijarne",
+                                 nacerev21 %in% c("K", "L", "M", "N") ~ "kvartarne",
+                                 nacerev21 %in% c("O", "P", "Q", "R", "S", "T") ~ "kvintarne")) %>%
+  group_by(reportyear, djelatnosti, countyid) %>%
+  summarise(n = n_distinct(subjectid),
+            prihod = sum(prihod, na.rm = TRUE),
+            izvoz = sum(Export, na.rm = TRUE),
+            uvoz = sum(Import, na.rm = TRUE),
+            k_dug = sum(k_dug, na.rm = TRUE),
+            d_dug = sum(d_dug, na.rm = TRUE),
+             rad = sum(employeecounteop, na.rm = TRUE),
+             mim = sum(matimov, na.rm = TRUE),
+             nim = sum(nematimov, na.rm = TRUE),
+             placa = sum(placa_brutto, na.rm = TRUE),
+             amortizacija = sum(amortizacija , na.rm = TRUE),
+             fin_rashod = sum(financijski_trosak , na.rm = TRUE),
+             tax_nett = sum(porez_dobit , na.rm = TRUE),
+             nett = sum(nett , na.rm = TRUE),
+             kapital = sum(kapital_rezerve , na.rm = TRUE),
+             plata =  (sum(placa_brutto, na.rm = TRUE)/(sum(employeecounteop, na.rm = TRUE)))*1000000000/12) %>%
+    mutate( dv = placa + amortizacija + fin_rashod + tax_nett + nett,
+           imov = mim + nim,
+           dug = k_dug + d_dug,
+ #          invest = (imov + amortizacija) - dplyr::lag(imov)
+ ) %>%
+  drop_na(djelatnosti) %>%
+  full_join(., geo, by = c("countyid" = "ZUPANIJA")) %>%
+  select(reportyear, djelatnosti, countyid, zupanija = NAZIV_ZUP, n, rad, prihod, izvoz, uvoz, mim, nim, kapital, plata, dv, imov, dug, reportyear)  -> zup_sektori
+
+
+zup_sektori %>%
+  filter(reportyear == 2016) %>%
+  write.csv2(., "zupanije_aggInd_2016.csv")
+
+zup_sektori %>%
+  filter(reportyear == 2012) %>%
+  write.csv2(., "zupanije_aggInd_2012.csv")
+
+zup_sektori %>%
+  filter(reportyear == 2008) %>%
+  write.csv2(., "zupanije_aggInd_2008.csv")
+
+zup_sektori %>%
+  filter(reportyear == 2002) %>%
+  write.csv2(., "zupanije_aggInd_2002.csv")
+
+data %>%
+#  filter( reportyear == 2016) %>%
+  mutate(djelatnosti = case_when(nacerev21 == "A" ~ "primarne",
+                                 nacerev21 %in% c("B", "C", "D", "E", "F") ~ "sekundarne",
+                                 nacerev21 %in% c("G", "H", "I", "J") ~ "tecijarne",
+                                 nacerev21 %in% c("K", "L", "M", "N") ~ "kvartarne",
+                                 nacerev21 %in% c("O", "P", "Q", "R", "S", "T") ~ "kvintarne")) %>%
+  full_join(., geo, by = c("municipalityid" = "OPCINA")) %>% 
+  group_by(reportyear,djelatnosti, municipalityid, NAZIV_OPC, nacerev21,nacerev22, nacerev23 ) %>%
+  summarise(n = n_distinct(subjectid),
+            prihod = sum(prihod, na.rm = TRUE),
+            izvoz = sum(Export, na.rm = TRUE),
+            uvoz = sum(Import, na.rm = TRUE),
+            k_dug = sum(k_dug, na.rm = TRUE),
+            d_dug = sum(d_dug, na.rm = TRUE),
+             rad = sum(employeecounteop, na.rm = TRUE),
+             mim = sum(matimov, na.rm = TRUE),
+             nim = sum(nematimov, na.rm = TRUE),
+             placa = sum(placa_brutto, na.rm = TRUE),
+             amortizacija = sum(amortizacija , na.rm = TRUE),
+             fin_rashod = sum(financijski_trosak , na.rm = TRUE),
+             tax_nett = sum(porez_dobit , na.rm = TRUE),
+             nett = sum(nett , na.rm = TRUE),
+             kapital = sum(kapital_rezerve , na.rm = TRUE),
+             plata =  (sum(placa_brutto, na.rm = TRUE)/(sum(employeecounteop, na.rm = TRUE)))*1000000000/12)%>%
+    mutate(dv = placa + amortizacija + fin_rashod + tax_nett + nett,
+           imov = mim + nim,
+           dug = k_dug + d_dug,
+           invest = (imov + amortizacija) - dplyr::lag(imov)) %>%
+  drop_na(djelatnosti) -> grad_ 
+
+
+grad_ %>%
+  filter(reportyear == 2016) %>%
+  write.csv2(., "gradovi_2016.csv")
+
+grad_ %>%
+  filter(reportyear == 2012) %>%
+  write.csv2(., "gradovi_2012.csv")
+
+grad_ %>%
+  filter(reportyear == 2008) %>%
+  write.csv2(., "gradovi_2008.csv")
+
+grad_ %>%
+  filter(reportyear == 2002) %>%
+  write.csv2(., "gradovi_2002.csv")
+
+
+
+
+
+
+
+
+
+#%>% View()
+  filter(municipalityid == 130) %>% 
+  ungroup() %>%
+  summarise(prihod = sum(prihod)) %>% 
+
+
+
+de %>%
+  filter(reportyear < 2009) -> dep
+
+ostali %>%
+  filter(reportyear < 2009) %>%
+  left_join(., dep, by = "reportyear") %>% 
+  group_by(reportyear) %>%
+  mutate("Broj poduzeća" = (n.y / n.x)*100,
+         "Prihodi" = (prihod.y / prihod.x)*100,
+         "Izvoz" = (izvoz.y / izvoz.x)*100,
+         "Uvoz" = (uvoz.y / uvoz.x)*100,
+         "Nematerijalna imovina" = (nim.y / nim.x)*100,
+         "Materijalna imovina" = (mim.y / mim.x)*100,
+         "Dodana vrijednost" = (dv.y / dv.x)*100,
+         "Broj zaposlenih" = (rad.y / rad.x)*100,
+         "Dobit" = (nett.y / nett.x)*100,
+         "Kapital" = (kapital.y / kapital.x)*100, 
+         "Investicije" = (invest.y / invest.x)*100,
+         "Dug" = (dug.y / dug.x)*100) %>%
+  select("Broj poduzeća","Prihodi", "Izvoz", "Uvoz", "Nematerijalna imovina","Materijalna imovina","Dodana vrijednost","Broj zaposlenih", "Dobit", "Kapital", "Investicije", "Dug") %>%
+  ungroup() %>%
+  summarise_all(list(function(x) mean(na.omit(x)))) %>%
+  select(-reportyear) %>%
+  gather("Pokazatelj", "Udio %") -> pre
+
+#agregatno nakon krize
+
+
+de %>%
+  filter(reportyear > 2008) -> depotla
+
+ostali %>%
+  filter(reportyear > 2008) %>%
+  left_join(., depotla, by = "reportyear") %>% 
+  group_by(reportyear) %>%
+  mutate("Broj poduzeća" = (n.y / n.x)*100,
+         "Prihodi" = (prihod.y / prihod.x)*100,
+         "Izvoz" = (izvoz.y / izvoz.x)*100,
+         "Uvoz" = (uvoz.y / uvoz.x)*100,
+         "Nematerijalna imovina" = (nim.y / nim.x)*100,
+         "Materijalna imovina" = (mim.y / mim.x)*100,
+         "Dodana vrijednost" = (dv.y / dv.x)*100,
+         "Broj zaposlenih" = (rad.y / rad.x)*100,
+         "Dobit" = (nett.y / nett.x)*100,
+         "Kapital" = (kapital.y / kapital.x)*100, 
+         "Investicije" = (invest.y / invest.x)*100,
+         "Dug" = (dug.y / dug.x)*100) %>%
+  select("Broj poduzeća","Prihodi", "Izvoz", "Uvoz", "Nematerijalna imovina","Materijalna imovina","Dodana vrijednost","Broj zaposlenih", "Dobit", "Kapital", "Investicije", "Dug")%>%
+  ungroup() %>%
+  summarise_all(list(function(x) mean(na.omit(x)))) %>%
+  select(-reportyear) %>%
+  gather("Pokazatelj", "Udio %") -> potla
+
+
+udio <- left_join(pre,potla, by = "Pokazatelj") %>%
+  rename( "Prije krize" = "Udio %.x", "Nakon krize" = "Udio %.y")
+
+
+#ukupno: udjeli
+
+ostali %>%
+  left_join(., de, by = "reportyear") %>% 
+  group_by(reportyear) %>%
+  mutate("Broj poduzeća" = (n.y / n.x)*100,
+         "Prihodi" = (prihod.y / prihod.x)*100,
+         "Izvoz" = (izvoz.y / izvoz.x)*100,
+         "Uvoz" = (uvoz.y / uvoz.x)*100,
+         "Nematerijalna imovina" = (nim.y / nim.x)*100,
+         "Materijalna imovina" = (mim.y / mim.x)*100,
+         "Dodana vrijednost" = (dv.y / dv.x)*100,
+         "Broj zaposlenih" = (rad.y / rad.x)*100,
+         "Dobit" = (nett.y / nett.x)*100,
+         "Kapital" = (kapital.y / kapital.x)*100, 
+         "Investicije" = (invest.y / invest.x)*100,
+         "Dug" = (dug.y / dug.x)*100) %>%
+  select("Broj poduzeća","Prihodi", "Izvoz", "Uvoz", "Nematerijalna imovina","Materijalna imovina","Dodana vrijednost","Broj zaposlenih", "Dobit", "Kapital", "Investicije", "Dug") %>%
+  ungroup() %>%
+  summarise_all(list(function(x) mean(na.omit(x)))) %>%
+  select(-reportyear) %>%
+  gather("Pokazatelj", "Udio %") -> udjeli
+
+
+#pokazatelji po zaposlenom
+
+de %>%
+    group_by(reportyear) %>%
+    summarise(n_empl = (nim / rad)*1000000000,
+            imo_empl = (imov / rad)*1000000000,
+            inv_empl = (invest / rad)*1000000000,
+            ntt_empl = (nett / rad)*1000000000,
+            d_empl = ((k_dug + d_dug)/ rad)*1000000000,
+            dv_empl = (dv / rad)*1000000000,
+            iz_empl = (izvoz / rad)*1000000000,
+            uv_empl = (uvoz / rad)*1000000000,
+            p_empl = (prihod / rad)*1000000000,
+            zaposlenost = (rad / n),
+            dug = (k_dug + d_dug)/(mim + nim),
+            roe = (nett/kapital)*100,
+            roa = (nett/(mim + nim)*100),
+            plata,rad 
+            ) -> dez
+
+
+ostali %>%
+    group_by(reportyear) %>%
+    summarise(n_empl = (nim / rad)*1000000000,
+            imo_empl = (imov / rad)*1000000000,
+            inv_empl = (invest / rad)*1000000000,
+            ntt_empl = (nett / rad)*1000000000,
+            d_empl = ((k_dug + d_dug)/ rad)*1000000000,
+            dv_empl = (dv / rad)*1000000000,
+            iz_empl = (izvoz / rad)*1000000000,
+            uv_empl = (uvoz / rad)*1000000000,
+            p_empl = (prihod / rad)*1000000000,
+            zaposlenost = (rad / n),
+            dug = (k_dug + d_dug)/(mim + nim),
+            roe = (nett/kapital)*100,
+            roa = (nett/(mim + nim)*100),
+            plata,rad
+            ) -> osz
+
+setnames(dez, old=c( "n_empl", "ntt_empl","inv_empl","uv_empl", "iz_empl", "dv_empl", "d_empl", "p_empl" , "zaposlenost", "dug","roa", "roe"),
+               new=c("Nematerijalna_imovina","Dobit", "Investicije", "Uvoz", "Izvoz","Dodana_vrijednost","Zaduženost", "Prihodi", "Zaposlenost", "Zaduženost_omjer", "ROA", "ROE"))
+
+setnames(osz, old=c( "n_empl", "ntt_empl","inv_empl","uv_empl", "iz_empl", "dv_empl", "d_empl", "p_empl" , "zaposlenost", "dug","roa", "roe"),
+               new=c("Nematerijalna_imovina","Dobit", "Investicije", "Uvoz", "Izvoz","Dodana_vrijednost","Zaduženost", "Prihodi", "Zaposlenost", "Zaduženost_omjer", "ROA", "ROE"))
+
+#prije krize
+
+options(scipen = 999)
+
+dez %>%
+  filter(reportyear < 2009) %>%
+  select("Nematerijalna_imovina","Dobit", "Investicije", "Uvoz", "Izvoz","Dodana_vrijednost","Zaduženost", "Prihodi", "Zaposlenost", "Zaduženost_omjer", "ROA", "ROE", reportyear) %>%
+  ungroup() %>%
+  summarise_all(list(function(x) mean(na.omit(x)))) %>%
+  select(-reportyear) %>%
+  gather("Pokazatelj", "Digitalna ekonomija") -> dezpre
+  
+osz %>%
+  filter(reportyear < 2009) %>%
+  select("Nematerijalna_imovina","Dobit", "Investicije", "Uvoz", "Izvoz","Dodana_vrijednost","Zaduženost", "Prihodi", "Zaposlenost", "Zaduženost_omjer", "ROA", "ROE", reportyear) %>%
+  ungroup() %>%
+  summarise_all(list(function(x) mean(na.omit(x)))) %>%
+  select(-reportyear) %>%
+  gather("Pokazatelj", "Poslovni sektor") -> oszpre
+
+
+tzappre <- left_join(dezpre, oszpre, by = "Pokazatelj")
+
+#poslije krize
+
+dez %>%
+  filter(reportyear > 2008) %>%
+  select("Nematerijalna_imovina","Dobit", "Investicije", "Uvoz", "Izvoz","Dodana_vrijednost","Zaduženost", "Prihodi", "Zaposlenost", "Zaduženost_omjer", "ROA", "ROE", reportyear) %>%
+  ungroup() %>%
+  summarise_all(list(function(x) mean(na.omit(x)))) %>%
+  select(-reportyear) %>%
+  gather("Pokazatelj", "Digitalna ekonomija") -> dezpotla
+  
+osz %>%
+  filter(reportyear > 2008) %>%
+  select("Nematerijalna_imovina","Dobit", "Investicije", "Uvoz", "Izvoz","Dodana_vrijednost","Zaduženost", "Prihodi", "Zaposlenost", "Zaduženost_omjer", "ROA", "ROE", reportyear) %>%
+  ungroup() %>%
+  summarise_all(list(function(x) mean(na.omit(x)))) %>%
+  select(-reportyear) %>%
+  gather("Pokazatelj", "Poslovni sektor") -> oszpotla
+
+
+tzappotla <- left_join(dezpotla, oszpotla, by = "Pokazatelj")
+
+
+tabzap <- left_join(tzappre,tzappotla, by = "Pokazatelj")
+
+
+
+# ukupno : po zaposlenom
+
+
+options(scipen = 999)
+
+dez %>%
+  select("Nematerijalna_imovina","Dobit", "Investicije", "Uvoz", "Izvoz","Dodana_vrijednost","Zaduženost", "Prihodi", "Zaposlenost", "Zaduženost_omjer", "ROA", "ROE", reportyear) %>%
+  ungroup() %>%
+  summarise_all(list(function(x) mean(na.omit(x)))) %>%
+  select(-reportyear) %>%
+  gather("Pokazatelj", "Digitalna ekonomija") -> dezukupno
+  
+osz %>%
+  select("Nematerijalna_imovina","Dobit", "Investicije", "Uvoz", "Izvoz","Dodana_vrijednost","Zaduženost", "Prihodi", "Zaposlenost", "Zaduženost_omjer", "ROA", "ROE", reportyear) %>%
+  ungroup() %>%
+  summarise_all(list(function(x) mean(na.omit(x)))) %>%
+  select(-reportyear) %>%
+  gather("Pokazatelj", "Poslovni sektor") -> oszukupno
+
+
+tzapukupno <- left_join(dezukupno, oszukupno, by = "Pokazatelj")
+
+```
+
+
+
+# UVOD
+
+
+
+# EMPIRIJSKA ANALIZA
+
+
+
+## Id
+
+
+
+
+
+
+
+
+## Izračun ukupne faktorske produktivnosti
+
+
+
+```{r tablica_1, message = FALSE, eval = TRUE, echo=FALSE, include = TRUE }
+
+options(scipen = 999)
+
+
+#kable(udio)
+#kable(tabzap)
+#huxtable opcije
+
+tudio <- as_hux(udjeli, add_colnames = TRUE)
+bold(tudio)[1,] <- TRUE 
+bottom_border(tudio)[1,] <- 1
+caption(tudio) <- "Udio digitalne ekonomije u ukupnom poslovnom sektoru"
+align(tudio)[2:13,] <- " "
+align(tudio)[2:13,1] <- "left"
+tudio <- add_footnote(tudio , "* Iznosi su prikazani kao (%) udjeli u agregatnoj vrijednosti svih nefinancijskih poduzeća u Hrtvatskoj")
+
+tudio
+
+#kable(tudio)
+
+```
+
+
+```{r tablica_2, message = FALSE, eval = TRUE, echo=FALSE, include = TRUE }
+
+zapt <- as_hux(tzapukupno, add_colnames = TRUE )
+bold(zapt)[1,] <- TRUE
+bottom_border(zapt)[1,] <- 1
+caption(zapt) <- "Poslovne performanse digitalne ekonomije i cjelokupnog poslovnog sektora" 
+number_format(zapt)[2:9,] <- list(
+        function(x)
+          prettyNum(x,
+                    big.mark = ",", 
+                    digits = 0,
+                    scientific = FALSE))
+align(zapt)[2:13,] <- " "  
+align(zapt)[2:13,1] <- "left"
+#zapt <- rbind(c("","Prije krize", "", "Nakon krize", ""), zapt)
+
+#zapt %>% 
+#  merge_cells(1,2:3) %>%
+#  merge_cells(1,4:5)
+
+#align(zapt)[1,] <- "right"
+  
+#zapt[2,2] <- "Digitalna ekonomija"
+#zapt[2,3] <- "Poslovni sektor"
+#zapt[2,4] <- "Digitalna ekonomija"
+#zapt[2,5] <- "Poslovni sektor"
+
+zapt <- add_footnote(zapt , "* Vrijednosti su korigirane za broj zaposlenih i prikazane su u kunama. Zaposlenost se odnosi na prosječni broj zaposlenika u tvrtki. Zaduženost je izračunata kao omjer ukupnog duga i imovine.")
+
+
+
+position(zapt) <- "left"
+
+#position(zapt)
+
+zapt
+
+#kable(zapt)
+             
+
+```
+
+
+
+```{r radni, message = FALSE , include = FALSE, eval = FALSE}
+
+#no run
+
+data %>%
+  group_by(reportyear, subjectid) %>%
+  summarise(soft = sum(sofware_n, na.rm = TRUE))
+
+data %>%
+  group_by(reportyear) %>%
+  summarise(soft = sum(kpls, na.rm = TRUE),
+            n = n_distinct(subjectid[nematimov > 0]))
+
+data %>%
+  group_by(subjectid) %>%
+  filter( nacerev21 == "J") %>%
+  ungroup() %>%
+  group_by(reportyear) %>%
+  summarise(x = sum(employeecounteop , na.rm = TRUE),
+            n = n_distinct(subjectid),
+            Placa =  (sum (placa_brutto, na.rm = TRUE)/(sum (employeecounteop, na.rm = TRUE)))*1000000000/12,
+            dv = (sum(placa_brutto) + sum(amortizacija) + sum(financijski_trosak) + sum(porez_dobit) + sum(nett)) )
+
+
+
+data %>%
+  group_by(reportyear, nacerev21) %>%
+  filter(foreigncontrol > 0 &  nacerev21 %in% c("C", "G", "D", "M", "J", "H", "I", "F", "K") ) %>%
+  summarise(n = n_distinct(subjectid)) %>%
+  ggplot(., aes(x = reportyear, y = n, fill = nacerev21)) +
+  geom_bar(stat = "identity")
+
+
+```
+
+## Tehnologija u sektoru digitalne ekonomije  
+
+
+
+```{r tfp_de , message = FALSE , include = FALSE , echo=FALSE, eval = TRUE }
+
+mtp <- function(x) x * 1000000000
+
+
+# broj zaposlenih kao rad
+
+data %>%
+  filter( nacerev23 %in% c(261:264, 465, 581:639, 951)) %>%
+  group_by( reportyear, subjectid) %>%
+  summarise(rad = sum(employeecounteop, na.rm = TRUE),
+             mim = sum(matimov, na.rm = TRUE),
+             nim = sum(nematimov, na.rm = TRUE),
+             placa = sum(placa_brutto, na.rm = TRUE),
+             amortizacija = sum(amortizacija , na.rm = TRUE),
+             fin_rashod = sum(financijski_trosak , na.rm = TRUE),
+             tax_nett = sum(porez_dobit , na.rm = TRUE),
+             nett = sum(nett , na.rm = TRUE),
+             kapital = sum(kapital_rezerve , na.rm = TRUE),
+             energy = sum(energy , na.rm = TRUE),
+             nacerev21 = toString(nacerev21)) %>%
+  mutate_at(vars(mim, nim, placa, amortizacija, fin_rashod, tax_nett, nett, kapital, energy), funs(mtp)) %>%
+  mutate(dv = placa + amortizacija + fin_rashod + tax_nett + nett,
+         kapital_ = mim + nim) %>%
+         #inv = ((mim + amortizacija) - dplyr::lag(mim)) %>%
+  filter(dv > 0 & kapital > 0 & rad > 0 & energy > 0 ) %>%
+  mutate_at(vars(dv, kapital, rad, energy), funs(log)) %>%
+  filter(dv > 0 & kapital > 0 & rad > 0 & energy > 0)  %>%
+  ungroup() %>%
+  mutate(reportyear = as.numeric(reportyear),
+         subjectid = as.numeric(as.character(subjectid))) %>%
+  select(dv, kapital, rad, energy, subjectid, nacerev21, reportyear) %>%
+  rename(Y = dv  , 
+         sX = kapital,
+         fX = rad , 
+         pX = energy, 
+         idvar = subjectid,
+         timevar = reportyear) -> tfp_de
+
+
+WRDG <- prodestWRDG(tfp_de$Y, 
+                               tfp_de$fX,
+                               tfp_de$sX, 
+                               tfp_de$pX,
+                               tfp_de$idvar,
+                               tfp_de$timevar)
+
+omega(WRDG) -> tfp.wrdg
+
+dset_de <- tfp_de 
+  
+dset_de[,"tfp_wrdg"] <- tfp.wrdg
+
+dset_de_k <- dset_de 
+ 
+ 
+ dset_de %>%
+   mutate( tfp = as.numeric(tfp_wrdg)) %>%
+   group_by(timevar) %>%
+   summarise(tfp = sum(tfp, na.rm = TRUE)) %>%
+   mutate(tfp_ind = 1*tfp/tfp[1],
+          tfp_gr = c(0, diff(tfp))) -> tfp.de 
+ 
+# tfp.de %>%
+#  ggplot(.,aes(timevar, tfp_ind)) +
+#   geom_line() +
+#   theme_bw()
+
+
+```
+
+```{r tfp_ostali, message = FALSE , include = FALSE,  echo = FALSE, eval = TRUE}
+
+data %>%
+  filter( nacerev23 != c(261:264, 465, 581:639, 951)) %>% 
+  group_by( reportyear, subjectid) %>%
+  summarise(rad = sum(employeecounteop, na.rm = TRUE),
+             mim = sum(matimov, na.rm = TRUE),
+             nim = sum(nematimov, na.rm = TRUE),
+             placa = sum(placa_brutto, na.rm = TRUE),
+             amortizacija = sum(amortizacija , na.rm = TRUE),
+             fin_rashod = sum(financijski_trosak , na.rm = TRUE),
+             tax_nett = sum(porez_dobit , na.rm = TRUE),
+             nett = sum(nett , na.rm = TRUE),
+             kapital = sum(kapital_rezerve , na.rm = TRUE),
+             energy = sum(energy , na.rm = TRUE),
+             nacerev21 = toString(nacerev21)) %>%
+  mutate_at(vars(mim, nim, placa, amortizacija, fin_rashod, tax_nett, nett, kapital, energy), funs(mtp)) %>%
+  mutate(dv = placa + amortizacija + fin_rashod + tax_nett + nett,
+         kapital_ = mim + nim) %>%
+         #inv = ((mim + amortizacija) - dplyr::lag(mim)) %>%
+  filter(dv > 0 & kapital > 0 & rad > 0 & energy > 0 ) %>%
+  mutate_at(vars(dv, kapital, rad, energy), funs(log)) %>%
+  filter(dv > 0 & kapital > 0 & rad > 0 & energy > 0)  %>%
+  ungroup() %>%
+  mutate(reportyear = as.numeric(reportyear),
+         subjectid = as.numeric(as.character(subjectid))) %>%
+  select(dv, kapital, rad, energy, subjectid, nacerev21, reportyear) %>%
+  rename(Y = dv  , 
+         sX = kapital,
+         fX = rad , 
+         pX = energy, 
+         idvar = subjectid,
+         timevar = reportyear) -> tfp_ostali 
+
+
+WRDG <- prodestWRDG(tfp_ostali$Y, 
+                               tfp_ostali$fX,
+                               tfp_ostali$sX, 
+                               tfp_ostali$pX,
+                               tfp_ostali$idvar,
+                               tfp_ostali$timevar)
+
+
+omega(WRDG) -> ostali.wrdg
+
+dset_ostali <- tfp_ostali 
+  
+dset_ostali[,"tfp_wrdg_ost"] <- ostali.wrdg
+ 
+ 
+ dset_ostali %>%
+   mutate( tfp = as.numeric(tfp_wrdg_ost)) %>%
+   group_by(timevar) %>%
+   summarise(tfp = sum(tfp, na.rm = TRUE)) %>%
+   mutate(tfp_ind_ostali = 1*tfp/tfp[1],
+          tfp_gr_ostali = c(0, diff(tfp))) -> tfp.ostali
+ 
+# tfp.ostali %>%
+#   ggplot(.,aes(timevar, tfp_ind_ostali)) +
+#   geom_line() +
+#   theme_bw()
+
+
+
+```
+
+```{r tfp_prontier_gg, message = FALSE , echo = FALSE, include = TRUE, eval = TRUE }
+
+tfp.de %>%
+  left_join(.,tfp.ostali, by = "timevar" ) %>%
+  select(timevar, tfp_ind, tfp_ind_ostali) %>%
+  ggplot(.,aes(timevar)) +
+  geom_line(aes(y = tfp_ind, linetype = "de"), size = 1.2) +
+  geom_line(aes(y = tfp_ind_ostali, linetype = "ostali"), size = 1) +
+  theme_bw() +
+  scale_linetype_manual(values = c(de = "solid",
+                                   ostali = "dotted"),
+                        labels = c("Digitalna ekonomija",
+                                   "Poslovni sektor")) + 
+  theme(legend.title = element_blank(),
+        legend.position = c(0.8, 0.9),
+        legend.background = element_rect(fill = alpha("white", 0.1))) +
+  labs(title = "Grafikon 1:\nTFP u sektoru digitalne ekonomije",
+       y = "TFP indeks: 2002 = 1",
+       x = "Godina") +
+  scale_x_continuous(breaks = c(2002, 2004, 2006 , 2008, 2010, 2012, 2014, 2016, 2017),
+                     labels =  c("2002", "2004", "2006" , "2008", "2010", "2012", "2014", "2016", "2017"))
+  
+
+
+```
+
+
+```{r konvergencija , message = FALSE , echo = FALSE , include = TRUE }
+
+dset_de_k %>%
+  filter(tfp_wrdg > quantile(tfp_wrdg, 0.95) & timevar == "2002" ) -> start_h
+
+dset_de_k %>%
+  filter(tfp_wrdg < quantile(tfp_wrdg, 0.95) & timevar == "2002" ) -> start_l
+
+
+
+dset_de_k %>%
+  filter(idvar %in% start_h$idvar) %>%
+  mutate(tfp = as.numeric(tfp_wrdg)) %>%
+  group_by(timevar) %>%
+  summarise(tfp_sh = median(tfp, na.rm = TRUE)) %>%
+  mutate( tfp_shi = 1*tfp_sh/tfp_sh[1]) ->conv 
+  
+ dset_de_k %>%
+  filter(idvar %in% start_l$idvar) %>%
+  mutate(tfp = as.numeric(tfp_wrdg)) %>%
+  group_by(timevar) %>%
+  summarise(tfp_sl = median(tfp, na.rm = TRUE)) %>%
+  mutate( tfp_sli = 1*tfp_sl/tfp_sl[1]) -> conv_  
+  
+conv %>%
+  left_join(., conv_, by = "timevar") %>%
+  ggplot(., aes( timevar)) +
+  geom_line(aes(y = tfp_shi, linetype = "high"), size = 1.2) +
+  geom_line(aes(y = tfp_sli, linetype = "low"), size = 1) +
+  theme_bw() +
+  scale_linetype_manual(values = c(high = "solid",
+                                   low = "dotted"),
+                        labels = c("5% najproduktivnijih u 2002. godini",
+                                   "95% najproduktivnijih u 2002. godini")) + 
+  theme(legend.title = element_blank(),
+        legend.position = c(0.8, 0.5),
+        legend.background = element_rect(fill = alpha("white", 0.1))) +
+  labs(title = "Grafikon 2:\nKonvergencija TFP u sektoru digitalne ekonomije",
+       y = "Indeks prosječnog TFP: 2002 = 1",
+       x = "Godina") +
+  scale_x_continuous(breaks = c(2002, 2004, 2006 , 2008, 2010, 2012, 2014, 2016, 2017),
+                     labels =  c("2002", "2004", "2006" , "2008", "2010", "2012", "2014", "2016", "2017"))
+
+```
+
+
+
+```{r disperzija , message = FALSE ,echo = FALSE, include = TRUE}
+
+dset_de_k %>%
+  group_by(idvar) %>%
+  mutate(q1 = quantile(tfp_wrdg, 0.75),
+          q3 = quantile(tfp_wrdg, 0.25),
+          iqd = (q1 - q3)) %>% 
+  group_by(timevar) %>%
+  summarise(iqr = mean(iqd, na.rm = TRUE)) %>%
+  ggplot(., aes(timevar)) + 
+  geom_line(aes(y = iqr), size = 1.2) +
+  theme_bw() +
+  scale_linetype_manual(values = c(high = "solid")) + 
+  theme(legend.title = element_blank(),
+        legend.position = c(0.25, 0.1),
+        legend.background = element_rect(fill = alpha("white", 0.1))) +
+  labs(title = "Grafikon 3:\nInterkvartilna disperzija TFP u sektoru digitalne ekonomije",
+       y = "Interkvartilna razlika TFP razina",
+       x = "Godina") +
+  scale_x_continuous(breaks = c(2002, 2004, 2006 , 2008, 2010, 2012, 2014, 2016, 2017),
+                     labels =  c("2002", "2004", "2006" , "2008", "2010", "2012", "2014", "2016", "2017"))
+
+
+
+
+
+```
+
+# DISKUSIJA
+
+
+
+# ZAKLJUČAK
+
+
+
+
+# BIBLIOGRAFIJA
