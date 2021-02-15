@@ -27,13 +27,9 @@ link-citations: yes
 ```{r paketi, warning = FALSE, include = FALSE}
 #"C:/Users/msagovac/Dropbox/digipod/reference.bib"
 
-rm(list = ls()) 
-
-
+#rm(list = ls()) 
 #knitr::opts_chunk$set(echo = TRUE)
-
-
-if (Sys.getenv("JAVA_HOME")!="")  Sys.setenv(JAVA_HOME="")
+#if (Sys.getenv("JAVA_HOME")!="")  Sys.setenv(JAVA_HOME="")
 
 library(rJava)
 library(eurostat)
@@ -56,20 +52,12 @@ library(knitr)
 library(huxtable)
 library(stringr)
 library(rvest)
-
-
-
-
 ```
 
 ```{r varijable, message = FALSE , include = FALSE}
 
+source("D:/LUKA/Academic/PROTER_Geo/Credentials/creds.R")
 
-db <- dbConnect(MySQL(),
-                dbname = "odvjet12_gfi", 
-                host =  "91.234.46.219", 
-                port = 3306L, user = "odvjet12_mislav", 
-                password = "Theanswer0207")
 
 q <- sprintf("SELECT b372 AS Zaposleni,
                      b084/1000000000 AS d_dug,
@@ -102,7 +90,6 @@ q <- sprintf("SELECT b372 AS Zaposleni,
 data <- dbGetQuery(db, q)
 dbDisconnect(db)
 
-
 ```
 
 
@@ -122,21 +109,6 @@ data %>%
 ```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # UVOD
 
 
@@ -146,7 +118,6 @@ data %>%
 
 
 ## Identification
-
 
 
 
@@ -229,7 +200,7 @@ data %>%
                                  nacerev21 %in% c("G", "H", "I", "J") ~ "tecijarne",
                                  nacerev21 %in% c("K", "L", "M", "N") ~ "kvartarne",
                                  nacerev21 %in% c("O", "P", "Q", "R", "S", "T") ~ "kvintarne")) %>%
-  group_by(reportyear, djelatnosti, countyid) %>%
+  group_by(reportyear, djelatnosti, countyid) %>%  # , municipalityid
   summarise(n = n_distinct(subjectid),
             prihod = sum(prihod, na.rm = TRUE),
             izvoz = sum(Export, na.rm = TRUE),
@@ -254,6 +225,8 @@ data %>%
   drop_na(djelatnosti) %>%
   full_join(., geo, by = c("countyid" = "ZUPANIJA")) %>%
   select(reportyear, djelatnosti, countyid, zupanija = NAZIV_ZUP, n, rad, prihod, izvoz, uvoz, mim, nim, kapital, plata, dv, imov, dug, reportyear)  -> zup_sektori
+
+zup_sektori %>% write.csv2("D:/LUKA/Academic/PROTER_Geo/Data/fullDta.csv")
 
 
 zup_sektori %>%
