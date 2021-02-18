@@ -2,7 +2,7 @@
 
 # SIROVI PODATCI ZA GOSPIC
 
-
+ 
 x <- function(x){x*1000000000}
 
 gospic_full <-  data %>% 
